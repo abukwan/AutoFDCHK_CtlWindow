@@ -64,8 +64,8 @@ while True:
             # execute FDCHK
             app = pywinauto.Application().start(r"C:\FDCHK_EXT\fdchk_etc.exe")
             time.sleep(1)
-            #dlg = app.top_window()
-            # dlg.print_control_identifiers()
+            dlg = app.top_window()
+            #dlg.print_control_identifiers()
             print("Current AutoGUI_FDCHK version is: " + FDCHK_version)
             # fill CUST LOT ID on GUI
             app.window(title="FDCHK Ver" + FDCHK_version).window(control_id=42).type_keys(CUST_LOT_ID)
@@ -91,10 +91,23 @@ while True:
             pyautogui.screenshot(PIC_PATH)
             time.sleep(2)
             # close window
-            app.window(title="FDCHK Ver" + FDCHK_version).close()
-            time.sleep(1)
-            app.window(title="FDCHK Ver" + FDCHK_version).close()
-            time.sleep(1)
+            dlg = app.top_window()
+            dlg.print_control_identifiers()
+            #----- close exist window
+            # pass window
+            if app.window(title="FDCHK Result : Pass ").exists() is True:
+                app.window(title="FDCHK Result : Pass ").window(title="確定").click()
+                time.sleep(5)
+            # fail window
+            else:
+                if app.window(title="FDCHK Ver" + FDCHK_version).exists() is True:
+                    app.window(title="FDCHK Ver" + FDCHK_version).close()
+                    time.sleep(2)
+                if app.window(title="FDCHK Ver" + FDCHK_version).exists() is True:
+                    app.window(title="FDCHK Ver" + FDCHK_version).close()
+                    time.sleep(2)
+            #dlg = app.top_window()
+            #dlg.print_control_identifiers()
             # move csv file to archived folder
             archive_file_full_path = ARCHIVE_DIR + "\\" + FileName
             shutil.move(file_full_path, archive_file_full_path)
@@ -299,9 +312,12 @@ while True:
                 pyautogui.screenshot(DECISION_PIC_PATH)
                 time.sleep(2)
                 # close form
-                app.window(title="LOT DECISOIN").close()
-                time.sleep(1)
-                app.window(title="FDCHK Ver" + FDCHK_version).close()
-                time.sleep(1)
+                if app.window(title="LOT DECISOIN").exists() is True:
+                    app.window(title="LOT DECISOIN").close()
+                    time.sleep(1)
+                if app.window(title="FDCHK Ver" + FDCHK_version).exists() is True:
+                    app.window(title="FDCHK Ver" + FDCHK_version).close()
+                    time.sleep(1)
+
 
     time.sleep(period_time_sec)
