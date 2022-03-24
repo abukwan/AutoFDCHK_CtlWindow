@@ -23,6 +23,9 @@ period_time_sec = int(config['execute_con']['period_time_sec'])
 wait_result_sec = int(config['execute_con']['wait_result_sec'])
 # add FDCHK version for pywinauto
 FDCHK_version = config['execute_con']['FDCHK_version']
+# add DECISION wait secs.
+wait_DECISION_sec = int(config['execute_con']['wait_DECISION_sec'])
+
 # var from local
 dt_format = "%Y%m%d%H%M%S"
 
@@ -38,9 +41,14 @@ while True:
     # get file list
     data_files = [x[2] for x in os.walk(WORK_DIR)]
     # print(data_files[0])
+    # add flag for cust lot no include "-"
+    file_valid = False
     # each file to do
     for FileName in data_files[0]:
         stringlist = FileName.split("-")
+        file_split_count = len(stringlist)
+        if file_split_count == 4:
+            file_valid = True
         dt_string = stringlist[3][0:14]
         file_time = datetime.datetime.strptime(dt_string, dt_format)
         file_time2hour_string = stringlist[3][0:10]
@@ -49,8 +57,16 @@ while True:
         file_cust_lot = stringlist[0]
         # ********* check each file time diff
         minutes_diff = (datetime.datetime.now() - file_time).total_seconds() / 60
-        # executable file
-        if minutes_diff > time_min_gate:
+        # executable files
+        if minutes_diff > time_min_gate and file_valid is True:
+            # find related sbl files list first (need time to read from nas)
+            file_list = []
+            for sbl_filename in os.listdir(SBL_DIR):
+                if sbl_filename.startswith(file_cust_lot + "-" + file_lot_id + "-") and sbl_filename.endswith(".txt"):
+                    string_list = sbl_filename.split("-")
+                    dt_string = string_list[2][0:10]
+                    file_list.append([sbl_filename, dt_string])
+
             # read csv (lot info)
             file_full_path = WORK_DIR + "\\" + FileName
             df = pd.read_csv(file_full_path)
@@ -68,7 +84,7 @@ while True:
             #dlg.print_control_identifiers()
             print("Current AutoGUI_FDCHK version is: " + FDCHK_version)
             # fill CUST LOT ID on GUI
-            app.window(title="FDCHK Ver" + FDCHK_version).window(control_id=42).type_keys(CUST_LOT_ID)
+            app.window(title="FDCHK Ver" + FDCHK_version).window(control_id=43).type_keys(CUST_LOT_ID)
             time.sleep(1)
             # check if multi stage & select related option
             if stage_num > 1:
@@ -90,30 +106,43 @@ while True:
             PIC_PATH = PIC_DIR + "\\" + CUST_LOT_ID + "-" + file_lot_id + "-" + file_stage + ".png"
             pyautogui.screenshot(PIC_PATH)
             time.sleep(2)
-            # close window
-            dlg = app.top_window()
-            dlg.print_control_identifiers()
-            #----- close exist window
-            # pass window
-            if app.window(title="FDCHK Result : Pass ").exists() is True:
-                app.window(title="FDCHK Result : Pass ").window(title="確定").click()
-                time.sleep(5)
-            # fail window
-            else:
-                if app.window(title="FDCHK Ver" + FDCHK_version).exists() is True:
-                    app.window(title="FDCHK Ver" + FDCHK_version).close()
-                    time.sleep(2)
-                if app.window(title="FDCHK Ver" + FDCHK_version).exists() is True:
-                    app.window(title="FDCHK Ver" + FDCHK_version).close()
-                    time.sleep(2)
             #dlg = app.top_window()
             #dlg.print_control_identifiers()
+            # ----- close existing windows
+            # close main form
+            if app.window(title="FDCHK Ver" + FDCHK_version).exists() is True:
+                #dlg = app.top_window()
+                #dlg.print_control_identifiers()
+                app.window(title="FDCHK Ver" + FDCHK_version).close()
+                time.sleep(3)
+            # check if exist retangled confirm button , then click
+            retangled_confirm_button = pyautogui.locateOnScreen("DetectImages/retangled_confirm.png")
+            if retangled_confirm_button is not None:
+                #dlg = app.top_window()
+                #dlg.print_control_identifiers()
+                pyautogui.click(retangled_confirm_button)
+                time.sleep(2)
+            # 2nd - close main form
+            if app.window(title="FDCHK Ver" + FDCHK_version).exists() is True:
+                #dlg = app.top_window()
+                #dlg.print_control_identifiers()
+                app.window(title="FDCHK Ver" + FDCHK_version).close()
+                time.sleep(3)
+            # 2nd - check if exist retangled confirm button , then click
+            retangled_confirm_button = pyautogui.locateOnScreen("DetectImages/retangled_confirm.png")
+            if retangled_confirm_button is not None:
+                print("2nd_fdchk_confirm")
+                dlg = app.top_window()
+                dlg.print_control_identifiers()
+                pyautogui.click(retangled_confirm_button)
+                time.sleep(2)
+
             # move csv file to archived folder
             archive_file_full_path = ARCHIVE_DIR + "\\" + FileName
             shutil.move(file_full_path, archive_file_full_path)
 
             img = cv2.imread(PIC_PATH)
-            # remark by user for trial run
+            # remark by user for trial run first
             # ========= rectangle FDCHK add SBL information into screen shot image =======
             # FDCHK rectangle
             # FDCHK_lot_id_startX = 542
@@ -136,14 +165,9 @@ while True:
             SBL_endY = 837
             cv2.rectangle(img, (SBL_startX, SBL_startY), (SBL_endX, SBL_endY), (255, 255, 255), -1)
             # --------- find sbl file -> write sbl info to image
-            # find related MaxDT-sbl file
-            file_list = []
-            for sbl_filename in os.listdir(SBL_DIR):
-                if sbl_filename.startswith(CUST_LOT_ID + "-" + file_lot_id + "-"):
-                    string_list = sbl_filename.split("-")
-                    dt_string = string_list[2][0:10]
-                    file_list.append([sbl_filename, dt_string])
 
+
+            # max dt sbl file
             sbl_file_count = len(file_list)
             if sbl_file_count >= 1:
                 sbl_final_name = max(file_list)[0]
@@ -176,18 +200,23 @@ while True:
                 # -------- write SBL info
                 # separate more than n=50 chars string
                 sbl_line_count = 0
-                sep_i = 0
+                sep_count = 0
                 sep_n = 50
-                for sbl_line in sbl_lines:
-                    if len(sbl_line) >= sep_n:
+                len_sbl_lines = len(sbl_lines)
+                while sbl_line_count < (len_sbl_lines + sep_count):
+                    if len(sbl_lines[sbl_line_count]) >= 52:
                         # every n chars
-                        r = [sbl_line[sep_i:sep_i + sep_n] for sep_i in range(0, len(sbl_line), sep_n)]
+                        r = [sbl_lines[sbl_line_count][sep_i:sep_i + sep_n] for sep_i in
+                             range(0, len(sbl_lines[sbl_line_count]), sep_n)]
                         sbl_lines.pop(sbl_line_count)
-                        for sep_i in range(len(r)):
+                        sep_i = 0
+                        while sep_i < len(r):
                             sbl_lines.insert(sbl_line_count + sep_i, r[sep_i])
-                        sbl_line_count = sbl_line_count + len(r) - 1
-                    else:
-                        sbl_line_count += 1
+                            sep_i += 1
+                            sep_count += 1
+                        sbl_line_count -= 1
+                        sep_count -= 1
+                    sbl_line_count += 1
 
                 # write separated SBL info
                 # find "COMMENT" line count & check if exist "scrap"
@@ -305,7 +334,7 @@ while True:
                     time.sleep(0.5)
                 # Judgement btn click
                 app.window(title="LOT DECISOIN").window(title="Judgment").click()
-                time.sleep(5)
+                time.sleep(wait_DECISION_sec)
                 # screen shot
                 DECISION_PIC_PATH = \
                     PIC_DIR + "\\" + "DECISION_" + CUST_LOT_ID + "-" + file_lot_id + "-" + file_stage + ".png"
@@ -314,10 +343,42 @@ while True:
                 # close form
                 if app.window(title="LOT DECISOIN").exists() is True:
                     app.window(title="LOT DECISOIN").close()
-                    time.sleep(1)
+                    time.sleep(2)
+                    #dlg = app.top_window()
+                    #dlg.print_control_identifiers()
                 if app.window(title="FDCHK Ver" + FDCHK_version).exists() is True:
                     app.window(title="FDCHK Ver" + FDCHK_version).close()
-                    time.sleep(1)
-
+                    time.sleep(3)
+                    #dlg = app.top_window()
+                    #dlg.print_control_identifiers()
+                # 2nd close main form
+                retangled_confirm_button = pyautogui.locateOnScreen("DetectImages/retangled_confirm.png")
+                if retangled_confirm_button is not None:
+                    print("2nd_1_decision_confirm")
+                    dlg = app.top_window()
+                    dlg.print_control_identifiers()
+                    pyautogui.click(retangled_confirm_button)
+                    time.sleep(2)
+                if app.window(title="FDCHK Ver" + FDCHK_version).exists() is True:
+                    app.window(title="FDCHK Ver" + FDCHK_version).close()
+                    time.sleep(2)
+                retangled_confirm_button = pyautogui.locateOnScreen("DetectImages/retangled_confirm.png")
+                if retangled_confirm_button is not None:
+                    print("2nd_2_decision_confirm")
+                    dlg = app.top_window()
+                    dlg.print_control_identifiers()
+                    pyautogui.click(retangled_confirm_button)
+                    time.sleep(2)
+                # close backend form
+                if app.window(title="FDCHK").exists() is True:
+                    app.window(title="FDCHK").close()
+                    time.sleep(2)
+                retangled_confirm_button = pyautogui.locateOnScreen("DetectImages/retangled_confirm.png")
+                if retangled_confirm_button is not None:
+                    print("close_backend_confirm")
+                    dlg = app.top_window()
+                    dlg.print_control_identifiers()
+                    pyautogui.click(retangled_confirm_button)
+                    time.sleep(2)
 
     time.sleep(period_time_sec)
